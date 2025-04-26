@@ -24,7 +24,7 @@ Este script automatiza la instalación del sistema de gestión empresarial Factu
 
 1.  **Clonar el Repositorio (o Descargar el Script)**
     ```bash
-    git clone https://github.com/innovafpiesmmg/FacturaScripts
+    git clone [https://github.com/innovafpiesmmg/FacturaScripts.git](https://github.com/innovafpiesmmg/FacturaScripts.git)
     cd FacturaScripts
     ```
     O descarga el archivo `install_facturascripts_pgsql.sh` directamente.
@@ -71,7 +71,7 @@ Este script automatiza la instalación del sistema de gestión empresarial Factu
 * **Acceso a pgAdmin4:**
     * Accede a pgAdmin4 en tu navegador: `http://<IP_DEL_SERVIDOR>/pgadmin4`.
     * Inicia sesión con el email y contraseña que creaste durante el `setup-web.sh`.
-    * Dentro de pgAdmin, necesitas añadir manually la conexión a tu servidor PostgreSQL local:
+    * Dentro de pgAdmin, necesitas añadir manualmente la conexión a tu servidor PostgreSQL local:
         * Click derecho en "Servers" -> Create -> Server...
         * Pestaña 'General': Dale un nombre (ej. `Local PostgreSQL`).
         * Pestaña 'Connection':
@@ -90,8 +90,8 @@ Este script automatiza la instalación del sistema de gestión empresarial Factu
 
 ## Contribuciones
 
-Si encuentras errores o tienes sugerencias de mejora para el script, por favor abre un *Issue* o envía un *Pull Request*.
+Si encuentras errores o tienes sugerencias de mejora para el script, por favor abre un *Issue* o envía un *Pull Request* en el repositorio [https://github.com/innovafpiesmmg/FacturaScripts](https://github.com/innovafpiesmmg/FacturaScripts).
 
 ## Licencia
 
-[Especifica aquí la licencia bajo la cual distribuyes el script, por ejemplo, MIT, GPL, etc. Si no estás seguro, MIT es una opción permisiva común.]
+Este proyecto se distribuye bajo la Licencia MIT. Consulta el archivo `LICENSE` para más detalles (o visita [https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT)).
