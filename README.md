@@ -24,8 +24,8 @@ Este script automatiza la instalación del sistema de gestión empresarial Factu
 
 1.  **Clonar el Repositorio (o Descargar el Script)**
     ```bash
-    git clone <URL_DE_TU_REPOSITORIO_GIT>
-    cd <NOMBRE_DEL_DIRECTORIO>
+    git clone https://github.com/innovafpiesmmg/FacturaScripts
+    cd FacturaScripts
     ```
     O descarga el archivo `install_facturascripts_pgsql.sh` directamente.
 
