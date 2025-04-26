@@ -9,9 +9,10 @@ DB_NAME="facturascripts_db"
 DB_USER="facturascripts_user"
 # ¡¡CAMBIA ESTA CONTRASEÑA POR UNA SEGURA!!
 DB_PASSWORD="tu_contraseña_muy_segura"
-INSTALL_DIR="/var/www/facturascripts"
+INSTALL_DIR="/var/www/facturascripts" # Directorio final de instalación
 APACHE_CONF_FILE="/etc/apache2/sites-available/facturascripts.conf"
 PHP_VERSION="8.1" # Puedes ajustarla si necesitas otra versión compatible (>=7.4)
+DOWNLOAD_URL="https://facturascripts.com/DownloadBuild/1/stable" # URL oficial de descarga
 
 # --- Inicio del Script ---
 
@@ -50,7 +51,7 @@ sudo apt install -y apache2 postgresql postgresql-contrib \
     php${PHP_VERSION}-zip php${PHP_VERSION}-gd php${PHP_VERSION}-mbstring \
     php${PHP_VERSION}-curl php${PHP_VERSION}-xml php${PHP_VERSION}-intl \
     pgadmin4-web \
-    wget unzip git
+    wget unzip git # git se mantiene por si algún plugin lo necesita como dependencia
 echo ">>> Paquetes principales instalados."
 
 # 5. Configurar PostgreSQL (Crear base de datos y usuario para FacturaScripts)
@@ -100,16 +101,20 @@ else
     fi
 fi
 
-# 7. Descargar FacturaScripts
-echo ">>> 7/10: Descargando la última versión de FacturaScripts..."
+# 7. Descargar y preparar FacturaScripts usando wget
+echo ">>> 7/10: Descargando y preparando FacturaScripts desde la URL oficial..."
+# Crear el directorio de instalación si no existe
 sudo mkdir -p ${INSTALL_DIR}
+# Descargar el archivo zip a un directorio temporal
 cd /tmp
-# Usamos git para clonar la rama estable más reciente
-sudo git clone --depth 1 https://github.com/FacturaScripts/FacturaScripts.git facturascripts_temp
-sudo mv facturascripts_temp/* ${INSTALL_DIR}/
-sudo mv facturascripts_temp/.git* ${INSTALL_DIR}/ # Mover archivos ocultos importantes como .env.example
-sudo rm -rf facturascripts_temp
-echo ">>> FacturaScripts descargado en ${INSTALL_DIR}."
+sudo wget "${DOWNLOAD_URL}" -O facturascripts.zip
+# Descomprimir en el directorio de instalación final
+# Usamos --strip-components=1 para quitar el directorio 'facturascripts' que viene dentro del zip
+# y colocar el contenido directamente en INSTALL_DIR
+sudo unzip -q facturascripts.zip -d ${INSTALL_DIR} # Descomprime en el directorio destino
+# Limpiar el archivo zip descargado
+sudo rm facturascripts.zip
+echo ">>> FacturaScripts descargado y descomprimido en ${INSTALL_DIR}."
 
 # 8. Configurar Apache para FacturaScripts
 echo ">>> 8/10: Configurando Apache para FacturaScripts..."
@@ -141,14 +146,19 @@ echo ">>> Configuración de Apache para FacturaScripts creada y sitio habilitado
 
 # 9. Establecer Permisos para FacturaScripts
 echo ">>> 9/10: Estableciendo permisos para FacturaScripts..."
+# Asegurar que el propietario sea www-data
 sudo chown -R www-data:www-data ${INSTALL_DIR}
+# Permisos generales (seguridad)
 sudo find ${INSTALL_DIR} -type d -exec chmod 755 {} \;
 sudo find ${INSTALL_DIR} -type f -exec chmod 644 {} \;
+# Permisos de escritura necesarios para directorios específicos
 sudo chmod -R 775 ${INSTALL_DIR}/MyFiles
 sudo chmod -R 775 ${INSTALL_DIR}/tmp
+# Asegurar que el usuario www-data pueda escribir en la configuración si es necesario durante la instalación web
 if [ -f "${INSTALL_DIR}/config.php" ]; then
     sudo chmod 664 ${INSTALL_DIR}/config.php
 fi
+# Si existe .env, darle permisos adecuados (aunque normalmente se crea vía web)
 if [ -f "${INSTALL_DIR}/.env" ]; then
     sudo chmod 664 ${INSTALL_DIR}/.env
 fi
