@@ -16,8 +16,8 @@ DOWNLOAD_URL="https://facturascripts.com/DownloadBuild/1/stable" # URL oficial d
 
 # --- Inicio del Script ---
 
-# Detener en caso de error
-set -e
+# Detener en caso de error (excepto en la creación de DB/User si ya existen)
+# set -e # Se comenta temporalmente o se manejan errores específicos
 
 echo "--- Iniciando la instalación de FacturaScripts y pgAdmin4 con PostgreSQL ---"
 
@@ -25,7 +25,8 @@ echo "--- Iniciando la instalación de FacturaScripts y pgAdmin4 con PostgreSQL 
 echo ">>> 1/10: Actualizando paquetes e instalando dependencias básicas..."
 sudo apt update
 # Asegúrate de que software-properties-common y curl están instalados
-sudo apt install -y software-properties-common curl ca-certificates gnupg
+# Añadido imagemagick como dependencia para php-imagick
+sudo apt install -y software-properties-common curl ca-certificates gnupg imagemagick
 
 # 2. Añadir repositorio y clave GPG de PostgreSQL (Asegura la última versión)
 echo ">>> 2/10: Configurando repositorio oficial de PostgreSQL..."
@@ -45,38 +46,112 @@ sudo apt update # Actualizar de nuevo
 
 # 4. Instalar paquetes principales (Apache, PHP, PostgreSQL, pgAdmin4)
 echo ">>> 4/10: Instalando Apache, PHP, PostgreSQL y pgAdmin4..."
+# --- CORRECCIÓN: Añadidas extensiones recomendadas php-imagick y php-apcu ---
 sudo apt install -y apache2 postgresql postgresql-contrib \
     php${PHP_VERSION} libapache2-mod-php${PHP_VERSION} \
     php${PHP_VERSION}-cli php${PHP_VERSION}-common php${PHP_VERSION}-pgsql \
     php${PHP_VERSION}-zip php${PHP_VERSION}-gd php${PHP_VERSION}-mbstring \
     php${PHP_VERSION}-curl php${PHP_VERSION}-xml php${PHP_VERSION}-intl \
+    php${PHP_VERSION}-bcmath php${PHP_VERSION}-imagick php${PHP_VERSION}-apcu \
     pgadmin4-web \
     wget unzip git # git se mantiene por si algún plugin lo necesita como dependencia
+# -----------------------------------------------------------------------
 echo ">>> Paquetes principales instalados."
 
-# 5. Configurar PostgreSQL (Crear base de datos y usuario para FacturaScripts)
-echo ">>> 5/10: Configurando PostgreSQL para FacturaScripts..."
-# Crear usuario y base de datos en PostgreSQL
-sudo -u postgres psql -c "CREATE DATABASE ${DB_NAME};"
-sudo -u postgres psql -c "CREATE USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';"
+# 5. Configurar PostgreSQL (Crear base de datos y usuario para FacturaScripts - Idempotente)
+echo ">>> 5/10: Configurando PostgreSQL para FacturaScripts (comprobando existencia)..."
+
+# Comprobar si la base de datos existe
+DB_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'")
+if [ "$DB_EXISTS" = "1" ]; then
+    echo ">>> La base de datos '${DB_NAME}' ya existe. Saltando creación."
+else
+    echo ">>> Creando base de datos '${DB_NAME}'..."
+    sudo -u postgres psql -c "CREATE DATABASE ${DB_NAME};"
+    echo ">>> Base de datos '${DB_NAME}' creada."
+fi
+
+# Comprobar si el usuario existe
+USER_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'")
+if [ "$USER_EXISTS" = "1" ]; then
+    echo ">>> El usuario '${DB_USER}' ya existe. Saltando creación."
+    # Opcional: podrías querer actualizar la contraseña si ya existe
+    # sudo -u postgres psql -c "ALTER USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';"
+else
+    echo ">>> Creando usuario '${DB_USER}'..."
+    sudo -u postgres psql -c "CREATE USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';"
+    echo ">>> Usuario '${DB_USER}' creado."
+fi
+
+# Otorgar privilegios (generalmente seguro ejecutarlo múltiples veces)
+echo ">>> Otorgando privilegios a '${DB_USER}' sobre '${DB_NAME}'..."
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};"
-# Configurar la autenticación para que el usuario pueda conectar localmente (método md5)
+
+# --- CORRECCIÓN: Modificar pg_hba.conf para insertar reglas md5 en el lugar correcto ---
+echo ">>> Modificando pg_hba.conf para asegurar la autenticación md5 para ${DB_USER}..."
 PG_HBA_CONF=$(sudo -u postgres psql -t -P format=unaligned -c 'show hba_file;')
+NEEDS_RELOAD=0 # Flag para saber si necesitamos recargar postgresql
+
 if [ -f "$PG_HBA_CONF" ]; then
-    echo ">>> Modificando $PG_HBA_CONF para permitir la conexión local del usuario ${DB_USER} con md5..."
-    # Añadir o modificar la línea para permitir la conexión local con contraseña MD5
-    if ! sudo grep -q "host.*${DB_NAME}.*${DB_USER}.*127.0.0.1/32.*md5" "$PG_HBA_CONF"; then
-        echo "host    ${DB_NAME}    ${DB_USER}    127.0.0.1/32    md5" | sudo tee -a "$PG_HBA_CONF" > /dev/null
+    # Definir las líneas que queremos asegurar que estén presentes y en el lugar correcto
+    MD5_LINE_IPV4="host    ${DB_NAME}    ${DB_USER}    127.0.0.1/32    md5"
+    MD5_LINE_IPV6="host    ${DB_NAME}    ${DB_USER}    ::1/128         md5"
+    # Línea de referencia antes de la cual queremos insertar
+    REFERENCE_LINE="# IPv4 local connections:"
+
+    # Comprobar si las líneas ya existen ANTES de la línea de referencia
+    # (Esta comprobación es compleja y propensa a errores, optamos por eliminar/insertar)
+
+    # 1. Eliminar cualquier instancia previa de estas líneas (para evitar duplicados o mala ubicación)
+    # Usamos un delimitador diferente para sed por las barras en las IPs
+    if sudo grep -q "$MD5_LINE_IPV4" "$PG_HBA_CONF"; then
+        echo ">>> Encontrada regla IPv4 md5 existente para ${DB_USER}. Eliminando para reinsertar en orden."
+        sudo sed -i "\|$MD5_LINE_IPV4|d" "$PG_HBA_CONF"
+        NEEDS_RELOAD=1
     fi
-    if ! sudo grep -q "host.*${DB_NAME}.*${DB_USER}.*::1/128.*md5" "$PG_HBA_CONF"; then
-         echo "host    ${DB_NAME}    ${DB_USER}    ::1/128         md5" | sudo tee -a "$PG_HBA_CONF" > /dev/null
+     if sudo grep -q "$MD5_LINE_IPV6" "$PG_HBA_CONF"; then
+        echo ">>> Encontrada regla IPv6 md5 existente para ${DB_USER}. Eliminando para reinsertar en orden."
+        sudo sed -i "\|$MD5_LINE_IPV6|d" "$PG_HBA_CONF"
+        NEEDS_RELOAD=1
     fi
-    # Recargar configuración de PostgreSQL
-    sudo systemctl reload postgresql
+
+    # 2. Insertar las líneas md5 justo antes de la línea de referencia
+    # Comprobar si ya están insertadas correctamente (más simple que la comprobación anterior)
+    if sudo grep -q "$MD5_LINE_IPV4" "$PG_HBA_CONF" && sudo grep -q "$MD5_LINE_IPV6" "$PG_HBA_CONF"; then
+         # Podríamos hacer una comprobación más exhaustiva del orden aquí, pero por ahora asumimos
+         # que si existen, fueron insertadas por una ejecución previa de esta lógica.
+         echo ">>> Las reglas md5 para ${DB_USER} parecen estar ya presentes. Saltando inserción."
+    else
+        echo ">>> Insertando reglas md5 para ${DB_USER} antes de '${REFERENCE_LINE}'..."
+        # Usamos sed para insertar antes de la línea de referencia. '\t' para tabuladores.
+        sudo sed -i "/^${REFERENCE_LINE}/i ${MD5_LINE_IPV6}\n${MD5_LINE_IPV4}\n" "$PG_HBA_CONF"
+        # Verificar si la inserción fue exitosa (comprobación básica)
+        if sudo grep -q "$MD5_LINE_IPV4" "$PG_HBA_CONF"; then
+            echo ">>> Reglas md5 insertadas correctamente."
+            NEEDS_RELOAD=1
+        else
+            echo ">>> ¡Error! No se pudieron insertar las reglas md5 automáticamente. Revisa ${PG_HBA_CONF} manualmente."
+            # Podríamos decidir detener el script aquí si es crítico
+            # exit 1
+        fi
+    fi
+
+    # Recargar configuración de PostgreSQL solo si se hicieron cambios
+    if [ "$NEEDS_RELOAD" = "1" ]; then
+        echo ">>> Recargando configuración de PostgreSQL debido a cambios en pg_hba.conf..."
+        sudo systemctl reload postgresql
+    else
+        echo ">>> La configuración de pg_hba.conf no necesitó cambios."
+    fi
 else
     echo ">>> Advertencia: No se pudo encontrar automáticamente el archivo pg_hba.conf. La autenticación podría requerir ajuste manual."
 fi
-echo ">>> Base de datos '${DB_NAME}' y usuario '${DB_USER}' creados en PostgreSQL."
+# ---------------------------------------------------------------------------------
+echo ">>> Configuración de PostgreSQL para '${DB_NAME}' y '${DB_USER}' completada."
+
+
+# Reactivar set -e si se comentó antes, o continuar sin él
+# set -e
 
 # 6. Configurar PHP (Ajustes recomendados)
 echo ">>> 6/10: Configurando PHP..."
@@ -109,9 +184,7 @@ sudo mkdir -p ${INSTALL_DIR}
 cd /tmp
 sudo wget "${DOWNLOAD_URL}" -O facturascripts.zip
 # Descomprimir en el directorio de instalación final
-# Usamos --strip-components=1 para quitar el directorio 'facturascripts' que viene dentro del zip
-# y colocar el contenido directamente en INSTALL_DIR
-sudo unzip -q facturascripts.zip -d ${INSTALL_DIR} # Descomprime en el directorio destino
+sudo unzip -oq facturascripts.zip -d ${INSTALL_DIR} # -o para sobrescribir sin preguntar si ya existe
 # Limpiar el archivo zip descargado
 sudo rm facturascripts.zip
 echo ">>> FacturaScripts descargado y descomprimido en ${INSTALL_DIR}."
@@ -146,12 +219,16 @@ echo ">>> Configuración de Apache para FacturaScripts creada y sitio habilitado
 
 # 9. Establecer Permisos para FacturaScripts
 echo ">>> 9/10: Estableciendo permisos para FacturaScripts..."
+# --- CORRECCIÓN: Crear directorios MyFiles y tmp si no existen ---
+sudo mkdir -p ${INSTALL_DIR}/MyFiles
+sudo mkdir -p ${INSTALL_DIR}/tmp
+# -----------------------------------------------------------------
 # Asegurar que el propietario sea www-data
 sudo chown -R www-data:www-data ${INSTALL_DIR}
 # Permisos generales (seguridad)
 sudo find ${INSTALL_DIR} -type d -exec chmod 755 {} \;
 sudo find ${INSTALL_DIR} -type f -exec chmod 644 {} \;
-# Permisos de escritura necesarios para directorios específicos
+# Permisos de escritura necesarios para directorios específicos (ahora sí deberían existir)
 sudo chmod -R 775 ${INSTALL_DIR}/MyFiles
 sudo chmod -R 775 ${INSTALL_DIR}/tmp
 # Asegurar que el usuario www-data pueda escribir en la configuración si es necesario durante la instalación web
@@ -167,8 +244,15 @@ echo ">>> Permisos establecidos para FacturaScripts."
 # 10. Reiniciar Servicios e Instrucciones Finales
 echo ">>> 10/10: Reiniciando Apache y PostgreSQL..."
 sudo systemctl restart apache2
-sudo systemctl restart postgresql
-echo ">>> Servicios reiniciados."
+# Nota: PostgreSQL ya se recarga en el paso 5 si fue necesario
+if [ "$NEEDS_RELOAD" != "1" ]; then
+    # Si no se recargó antes, reiniciar ahora podría ser una opción,
+    # aunque reload suele ser suficiente si el servicio ya está corriendo.
+    # Considerar si es necesario reiniciar vs recargar aquí.
+    # Por seguridad, un restart asegura que todo está fresco.
+    sudo systemctl restart postgresql
+fi
+echo ">>> Servicios reiniciados/recargados."
 echo ""
 echo "--------------------------------------------------"
 echo "--- ¡INSTALACIÓN BÁSICA COMPLETADA! ---"
@@ -176,13 +260,13 @@ echo "--------------------------------------------------"
 echo ""
 echo "PASOS SIGUIENTES:"
 echo ""
-echo "1. CONFIGURAR pgAdmin4:"
+echo "1. CONFIGURAR pgAdmin4 (si no lo has hecho ya):"
 echo "   Ejecuta el siguiente comando e introduce un email y contraseña"
 echo "   cuando se te soliciten. Estas serán tus credenciales para acceder a pgAdmin."
 echo "   sudo /usr/pgadmin4/bin/setup-web.sh"
 echo "   (Presiona 'y' para confirmar la configuración del servidor web Apache cuando pregunte)."
 echo ""
-echo "2. COMPLETAR INSTALACIÓN WEB DE FACTURASCRIPTS:"
+echo "2. COMPLETAR INSTALACIÓN WEB DE FACTURASCRIPTS (si no lo has hecho ya):"
 echo "   Abre tu navegador y ve a: http://<IP_DEL_SERVIDOR>"
 echo "   Sigue el asistente de FacturaScripts. Usa los siguientes datos para la BD:"
 echo "   - Tipo:          PostgreSQL"
