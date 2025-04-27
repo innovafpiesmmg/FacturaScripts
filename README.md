@@ -1,92 +1,88 @@
-# Instalación Automatizada de FacturaScripts y pgAdmin4 en Ubuntu con PostgreSQL
+# Instalación Automatizada de FacturaScripts con Docker y Docker Compose
 
-Este script automatiza la instalación del sistema de gestión empresarial FacturaScripts y la herramienta de administración de bases de datos pgAdmin4 en un servidor Ubuntu (versiones LTS recomendadas como 20.04, 22.04). Configura un entorno completo con Apache, PHP (versión 8.1 por defecto), PostgreSQL como base de datos, pgAdmin4 en modo web, y descarga la última versión estable de FacturaScripts.
+Este script automatiza la instalación de Docker, Docker Compose y la configuración inicial de FacturaScripts utilizando Docker en sistemas operativos basados en Debian/Ubuntu (como Ubuntu 20.04/22.04, Debian 11/12).
 
-## Características
+**ADVERTENCIA:** Ejecuta este script bajo tu propia responsabilidad. Asegúrate de entender lo que hace antes de ejecutarlo en un sistema de producción.
 
-* Instala Apache2, PHP 8.1 (y extensiones necesarias), PostgreSQL (usando el repositorio oficial para versiones actualizadas).
-* Instala pgAdmin4 (modo web) desde su repositorio oficial.
-* Crea una base de datos y un usuario dedicado en PostgreSQL para FacturaScripts.
-* Intenta configurar la autenticación `md5` en PostgreSQL para conexiones locales del usuario de FacturaScripts.
-* Ajusta la configuración de PHP (`memory_limit`, `upload_max_filesize`, etc.).
-* Descarga la última versión estable de FacturaScripts desde GitHub.
-* Configura un Virtual Host básico en Apache para FacturaScripts.
-* Establece los permisos de archivo necesarios para la aplicación web FacturaScripts.
-* Reinicia los servicios necesarios (Apache, PostgreSQL).
+## ¿Qué hace este script?
 
-## Requisitos Previos
+1.  **Verifica Privilegios:** Comprueba si se ejecuta con permisos de superusuario (`sudo`).
+2.  **Actualiza el Sistema:** Ejecuta `apt-get update`.
+3.  **Instala Dependencias:** Instala paquetes necesarios como `curl`, `gnupg`, `ca-certificates`, `lsb-release`.
+4.  **Instala Docker:** Añade el repositorio oficial de Docker e instala Docker Engine (`docker-ce`, `docker-ce-cli`, `containerd.io`) si no está ya instalado.
+5.  **Instala Docker Compose:** Instala el plugin `docker-compose-plugin` si no está ya instalado.
+6.  **Crea Directorio:** Genera un directorio `facturascripts_docker` en el directorio `$HOME` del usuario que ejecuta el script con `sudo` (normalmente `/root/facturascripts_docker` si se ejecuta directamente como root, o `$HOME_DEL_USUARIO/facturascripts_docker` si se usa `sudo` desde un usuario normal).
+7.  **Genera Archivo `.env`:** Crea un archivo `.env` dentro del directorio de instalación con contraseñas aleatorias y seguras para la base de datos MySQL. **¡Es crucial guardar este archivo!**
+8.  **Crea `docker-compose.yml`:** Genera el archivo `docker-compose.yml` necesario para levantar los servicios de FacturaScripts y MySQL, leyendo la configuración de la base de datos desde el archivo `.env`.
+9.  **Inicia Contenedores:** Ejecuta `docker compose up -d` para descargar las imágenes necesarias (FacturaScripts y MySQL) y lanzar los contenedores en segundo plano.
+10. **Muestra Información Final:** Informa sobre la URL de acceso, la ubicación de los archivos de configuración y las contraseñas, y comandos básicos para gestionar los contenedores.
 
-* Un servidor con **Ubuntu** (preferiblemente LTS 20.04 o 22.04).
-* Acceso al servidor con un usuario que tenga privilegios `sudo`.
-* Conexión a internet en el servidor para descargar paquetes, claves GPG y FacturaScripts.
+## Prerrequisitos
 
-## Uso
+* Un sistema operativo basado en Debian/Ubuntu (ej. Ubuntu 20.04+, Debian 11+).
+* Acceso a internet para descargar paquetes e imágenes Docker.
+* Acceso `sudo` o como usuario `root`.
 
-1.  **Clonar el Repositorio (o Descargar el Script)**
+## Cómo Usar
+
+1.  **Descarga el Script:** Guarda el contenido del script en un archivo, por ejemplo, `install_facturascripts.sh`.
     ```bash
-    git clone [https://github.com/innovafpiesmmg/FacturaScripts.git](https://github.com/innovafpiesmmg/FacturaScripts.git)
-    cd FacturaScripts
+    wget [URL_DEL_SCRIPT_SI_ESTA_ONLINE] -O install_facturascripts.sh
+    # O copia y pega el contenido en un archivo nuevo
+    # nano install_facturascripts.sh
     ```
-    O descarga el archivo `install_facturascripts_pgsql.sh` directamente.
-
-2.  **¡IMPORTANTE! Editar la Contraseña de la Base de Datos**
-    Abre el script `install_facturascripts_pgsql.sh` con un editor de texto (como `nano`) y **cambia la contraseña por defecto** en la variable `DB_PASSWORD`.
+2.  **Da Permisos de Ejecución:**
     ```bash
-    nano install_facturascripts_pgsql.sh
+    chmod +x install_facturascripts.sh
     ```
-    Busca la línea `DB_PASSWORD="tu_contraseña_muy_segura"` y reemplázala por una contraseña fuerte. Guarda los cambios (Ctrl+O, Enter, Ctrl+X en `nano`).
-
-3.  **Dar Permisos de Ejecución**
+3.  **Ejecuta con `sudo`:**
     ```bash
-    chmod +x install_facturascripts_pgsql.sh
+    sudo ./install_facturascripts.sh
     ```
-
-4.  **Ejecutar el Script Principal con `sudo`**
-    ```bash
-    sudo bash install_facturascripts_pgsql.sh
-    ```
-    El script instalará todo el software necesario y configurará el entorno base. Espera a que finalice completamente.
-
-5.  **Configurar pgAdmin4 (Post-Script)**
-    Una vez que el script anterior haya terminado, ejecuta el siguiente comando para configurar el acceso web a pgAdmin4. Se te pedirá un email y una contraseña, que serán tus credenciales para entrar a pgAdmin.
-    ```bash
-    sudo /usr/pgadmin4/bin/setup-web.sh
-    ```
-    Sigue las instrucciones en pantalla. Cuando pregunte sobre configurar el servidor web, responde afirmativamente (`y`) para integrar pgAdmin con Apache.
-
-6.  **Completar la Instalación Web de FacturaScripts**
-    Abre tu navegador web y navega a la dirección IP de tu servidor (ej. `http://<IP_DEL_SERVIDOR>`).
-    Sigue las instrucciones del asistente de instalación de FacturaScripts:
-    * Selecciona **PostgreSQL** como tipo de base de datos.
-    * Introduce los detalles de la base de datos configurados en el script:
-        * Base de datos: `facturascripts_db`
-        * Usuario: `facturascripts_user`
-        * Contraseña: **La contraseña segura que estableciste en el paso 2.**
-        * Host: `localhost`
-        * Puerto: `5432`
-    * Completa el resto de los pasos del asistente (creación del usuario administrador, etc.).
+4.  **Sigue las Instrucciones:** El script mostrará el progreso. Presta atención a la salida final.
 
 ## Post-Instalación
 
-* **Acceso a pgAdmin4:**
-    * Accede a pgAdmin4 en tu navegador: `http://<IP_DEL_SERVIDOR>/pgadmin4`.
-    * Inicia sesión con el email y contraseña que creaste durante el `setup-web.sh`.
-    * Dentro de pgAdmin, necesitas añadir manualmente la conexión a tu servidor PostgreSQL local:
-        * Click derecho en "Servers" -> Create -> Server...
-        * Pestaña 'General': Dale un nombre (ej. `Local PostgreSQL`).
-        * Pestaña 'Connection':
-            * Host name/address: `localhost`
-            * Port: `5432`
-            * Maintenance database: `postgres` (o `facturascripts_db`)
-            * Username: `facturascripts_user`
-            * Password: **La contraseña segura que estableciste en el paso 2.**
-        * Guarda la conexión. Ahora podrás administrar la base de datos de FacturaScripts desde pgAdmin.
+* **Acceso a FacturaScripts:** Abre tu navegador web y ve a la dirección IP de tu servidor seguida del puerto `8000` (o el puerto que hayas configurado en la variable `FACTURASCRIPTS_PORT` del script). Ejemplo: `http://TU_DIRECCION_IP:8000`.
+* **Archivos de Configuración:** Los archivos `docker-compose.yml` y `.env` se encuentran en el directorio de instalación (por defecto `$HOME/facturascripts_docker`).
+* **Contraseñas:** Las contraseñas generadas para la base de datos MySQL (`MYSQL_ROOT_PASSWORD` y `MYSQL_PASSWORD`) se encuentran en el archivo `.env`. **¡GUARDA ESTE ARCHIVO EN UN LUGAR SEGURO!** Si lo pierdes, no podrás reconfigurar fácilmente la conexión a la base de datos.
+* **Persistencia de Datos:** Los datos de FacturaScripts (plugins, archivos subidos) y de la base de datos MySQL se guardan en volúmenes de Docker (`facturascripts_data` y `mysql_data`), por lo que persistirán aunque detengas o reinicies los contenedores.
 
-* **Plugins de FacturaScripts:** Accede a tu instalación de FacturaScripts (`http://<IP_DEL_SERVIDOR>`) y utiliza el Marketplace integrado para instalar los plugins gratuitos o de pago que necesites.
+## Gestión de los Contenedores
 
-* **Seguridad de PostgreSQL:** Revisa la configuración de `pg_hba.conf` para asegurarte de que los métodos de autenticación son los adecuados para tu entorno más allá de la configuración básica realizada por el script.
+Para gestionar los contenedores, navega al directorio de instalación (`cd $HOME/facturascripts_docker`) y usa los siguientes comandos `docker compose`:
 
-* **Configuración de Apache:** Si tienes un nombre de dominio, edita el archivo `/etc/apache2/sites-available/facturascripts.conf`, descomenta y ajusta la línea `ServerName`. Considera configurar HTTPS/SSL (Let's Encrypt es una buena opción gratuita) para asegurar tanto FacturaScripts como pgAdmin4. Reinicia Apache después de los cambios (`sudo systemctl restart apache2`).
+* **Ver estado y logs:**
+    ```bash
+    sudo docker compose ps
+    sudo docker compose logs -f # Muestra logs en tiempo real (Ctrl+C para salir)
+    sudo docker compose logs facturascripts # Logs solo de FacturaScripts
+    sudo docker compose logs mysql # Logs solo de MySQL
+    ```
+* **Detener los servicios:**
+    ```bash
+    sudo docker compose down
+    ```
+* **Iniciar los servicios (en segundo plano):**
+    ```bash
+    sudo docker compose up -d
+    ```
+* **Reiniciar los servicios:**
+    ```bash
+    sudo docker compose restart
+    ```
+* **Actualizar la imagen de FacturaScripts (cuando haya nuevas versiones):**
+    ```bash
+    sudo docker compose pull facturascripts # Descarga la última imagen
+    sudo docker compose up -d --remove-orphans # Reinicia usando la nueva imagen
+    ```
+
+## Notas Importantes
+
+* **Firewall:** Asegúrate de que el puerto especificado (`FACTURASCRIPTS_PORT`, por defecto 8000) esté abierto en el firewall de tu servidor para permitir conexiones entrantes. Por ejemplo, usando `ufw`: `sudo ufw allow 8000/tcp`.
+* **Correo Electrónico:** La configuración para el envío de correos desde FacturaScripts está comentada en el archivo `docker-compose.yml`. Si necesitas esta funcionalidad, descomenta la línea `MAILER_URL` dentro de la sección `environment` del servicio `facturascripts`, edítala con tus datos SMTP y reinicia los contenedores (`sudo docker compose down && sudo docker compose up -d`).
+* **Seguridad del `.env`:** El archivo `.env` contiene información sensible (contraseñas). Asegúrate de que los permisos del archivo sean restrictivos y guarda una copia de seguridad en un lugar seguro.
+
 
 ## Contribuciones
 
