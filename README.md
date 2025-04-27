@@ -44,7 +44,7 @@ Este script automatiza la instalación de Docker, Docker Compose y la configurac
 ## Post-Instalación
 
 * **Acceso a FacturaScripts:** Abre tu navegador web y ve a la dirección IP de tu servidor seguida del puerto `8000` (o el puerto que hayas configurado en la variable `FACTURASCRIPTS_PORT` del script). Ejemplo: `http://TU_DIRECCION_IP:8000`.
-* **Archivos de Configuración:** Los archivos `docker-compose.yml` y `.env` se encuentran en el directorio de instalación (por defecto `$HOME/facturascripts_docker`).
+* **Archivos de Configuración:** Los archivos `docker-compose.yml` y `.env` en `/root/facturascripts_docker/.env` se encuentran en el directorio de instalación (por defecto `$HOME/facturascripts_docker`).
 * **Contraseñas:** Las contraseñas generadas para la base de datos MySQL (`MYSQL_ROOT_PASSWORD` y `MYSQL_PASSWORD`) se encuentran en el archivo `.env`. **¡GUARDA ESTE ARCHIVO EN UN LUGAR SEGURO!** Si lo pierdes, no podrás reconfigurar fácilmente la conexión a la base de datos.
 * **Persistencia de Datos:** Los datos de FacturaScripts (plugins, archivos subidos) y de la base de datos MySQL se guardan en volúmenes de Docker (`facturascripts_data` y `mysql_data`), por lo que persistirán aunque detengas o reinicies los contenedores.
 
